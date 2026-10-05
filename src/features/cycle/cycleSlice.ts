@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import { PHASE_DURATION_MS, nextPhase } from './constants'
+import { PHASE_DURATION_MS, PHASES, nextPhase } from './constants'
 import type { CycleState, Phase } from './types'
 
 const initialTimestamp = Date.now()
@@ -7,7 +7,7 @@ const initialTimestamp = Date.now()
 export const initialCycleState: CycleState = {
   version: 1,
   cycleNumber: 1,
-  currentPhase: 'sleep',
+  currentPhase: null,
   completed: { sleep: false, work: false, tasks: false },
   timer: null,
   updatedAt: initialTimestamp,
@@ -15,7 +15,7 @@ export const initialCycleState: CycleState = {
   lastNotifiedKey: null,
 }
 
-interface CompletePayload {
+interface PhasePayload {
   phase: Phase
   now: number
 }
@@ -25,34 +25,62 @@ interface MarkNotifiedPayload {
   now: number
 }
 
+const resetCompleted = () => ({ sleep: false, work: false, tasks: false })
+
 const cycleSlice = createSlice({
   name: 'cycle',
   initialState: initialCycleState,
   reducers: {
-    completePhase(state, action: PayloadAction<CompletePayload>) {
+    startPhase(state, action: PayloadAction<PhasePayload>) {
       const { phase, now } = action.payload
-      if (state.currentPhase !== phase) return
-      if (state.completed[phase]) return
-      if (state.timer && state.timer.phase === phase && now < state.timer.endsAt) return
+      if (state.timer) return
 
-      state.completed[phase] = true
-      const upcoming = nextPhase(phase)
+      const selectedIndex = PHASES.indexOf(phase)
+      for (const [index, candidate] of PHASES.entries()) {
+        state.completed[candidate] = index < selectedIndex
+      }
+
+      state.currentPhase = phase
+      state.timer = {
+        phase,
+        startedAt: now,
+        endsAt: now + PHASE_DURATION_MS,
+      }
       state.updatedAt = now
+      state.cycleCompletedAt = null
       state.lastNotifiedKey = null
+    },
 
-      if (upcoming) {
+    advanceCycle(state, action: PayloadAction<{ now: number }>) {
+      const now = action.payload.now
+      let advanced = false
+
+      while (state.timer && now >= state.timer.endsAt) {
+        advanced = true
+        const finishedPhase = state.timer.phase
+        const transitionAt = state.timer.endsAt
+
+        state.completed[finishedPhase] = true
+
+        if (finishedPhase === 'tasks') {
+          state.cycleNumber += 1
+          state.completed = resetCompleted()
+          state.cycleCompletedAt = transitionAt
+        }
+
+        const upcoming = nextPhase(finishedPhase)
         state.currentPhase = upcoming
         state.timer = {
           phase: upcoming,
-          startedAt: now,
-          endsAt: now + PHASE_DURATION_MS,
+          startedAt: transitionAt,
+          endsAt: transitionAt + PHASE_DURATION_MS,
         }
-      } else {
-        state.currentPhase = null
-        state.timer = null
-        state.cycleCompletedAt = now
+        state.lastNotifiedKey = null
       }
+
+      if (advanced) state.updatedAt = now
     },
+
     undoLastCompletion(state, action: PayloadAction<{ now: number }>) {
       const now = action.payload.now
       let phase: Phase | null = null
@@ -64,35 +92,39 @@ const cycleSlice = createSlice({
       if (!phase) return
 
       state.completed[phase] = false
-      state.currentPhase = phase
+      state.currentPhase = null
       state.timer = null
       state.cycleCompletedAt = null
       state.lastNotifiedKey = null
       state.updatedAt = now
     },
+
     startNewCycle(state, action: PayloadAction<{ now: number }>) {
       const now = action.payload.now
       state.cycleNumber += 1
-      state.currentPhase = 'sleep'
-      state.completed = { sleep: false, work: false, tasks: false }
+      state.currentPhase = null
+      state.completed = resetCompleted()
       state.timer = null
       state.updatedAt = now
       state.cycleCompletedAt = null
       state.lastNotifiedKey = null
     },
+
     resetCurrentCycle(state, action: PayloadAction<{ now: number }>) {
       const now = action.payload.now
-      state.currentPhase = 'sleep'
-      state.completed = { sleep: false, work: false, tasks: false }
+      state.currentPhase = null
+      state.completed = resetCompleted()
       state.timer = null
       state.updatedAt = now
       state.cycleCompletedAt = null
       state.lastNotifiedKey = null
     },
+
     markTimerNotified(state, action: PayloadAction<MarkNotifiedPayload>) {
       state.lastNotifiedKey = action.payload.key
       state.updatedAt = action.payload.now
     },
+
     replaceFromSync(_state, action: PayloadAction<CycleState>) {
       return action.payload
     },
@@ -100,7 +132,8 @@ const cycleSlice = createSlice({
 })
 
 export const {
-  completePhase,
+  startPhase,
+  advanceCycle,
   undoLastCompletion,
   startNewCycle,
   resetCurrentCycle,
