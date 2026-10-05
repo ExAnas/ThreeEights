@@ -32,8 +32,8 @@ export const PHASE_META: Record<
   },
 }
 
-export const nextPhase = (phase: Phase): Phase | null => {
+export const nextPhase = (phase: Phase): Phase => {
   if (phase === 'sleep') return 'work'
   if (phase === 'work') return 'tasks'
-  return null
+  return 'sleep'
 }
