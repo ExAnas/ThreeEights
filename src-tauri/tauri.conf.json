@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "8x3",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "identifier": "com.threeeights.daybalance",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -38,5 +38,17 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI1RTkxQzc4MzJBQkU1NkQKUldSdDVhc3llQnpwSlFyNkNCSmRwTVFWYUxCMWlReXBHcllBc2NnQ1lDbE5aNVFlb2tNYmVTQzIK",
+      "endpoints": [
+        "https://github.com/ExAnas/ThreeEights/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

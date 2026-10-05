@@ -1,4 +1,5 @@
 import { PHASE_DURATION_MS, EIGHT_HOURS_MS } from '../features/cycle/constants'
+import { UpdatePanel } from './UpdatePanel'
 
 interface Props {
   open: boolean
@@ -51,6 +52,8 @@ export function SettingsPanel({
           {notificationPermission === 'granted' ? 'مفعّلة' : notificationPermission === 'denied' ? 'محظورة من النظام' : notificationPermission === 'unsupported' ? 'غير مدعومة' : 'تفعيل الإشعارات'}
         </button>
       </div>
+
+      <UpdatePanel />
 
       {PHASE_DURATION_MS !== EIGHT_HOURS_MS && (
         <div className="dev-note" role="note">

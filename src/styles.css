@@ -127,7 +127,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .site-footer span:first-child { font: 700 13px 'Space Grotesk', sans-serif; color: var(--ink); }
 
 .settings-scrim { position: fixed; inset: 0; border: 0; background: rgba(0,0,0,.22); backdrop-filter: blur(3px); z-index: 20; }
-.settings-panel { position: fixed; z-index: 30; inset-block: 0; left: 0; width: min(420px, 92vw); padding: 28px; background: var(--surface-solid); border-right: 1px solid var(--line); transform: translateX(-105%); transition: transform .3s cubic-bezier(.2,.8,.2,1); box-shadow: 30px 0 80px rgba(0,0,0,.15); }
+.settings-panel { position: fixed; z-index: 30; inset-block: 0; left: 0; width: min(420px, 92vw); padding: 28px; background: var(--surface-solid); border-right: 1px solid var(--line); transform: translateX(-105%); transition: transform .3s cubic-bezier(.2,.8,.2,1); box-shadow: 30px 0 80px rgba(0,0,0,.15); overflow-y: auto; }
 .settings-panel--open { transform: translateX(0); }
 .settings-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
 .settings-head h2 { margin: 4px 0 0; font-size: 26px; }
@@ -143,6 +143,16 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .dev-note { margin-top: 20px; padding: 14px; border-radius: 14px; background: color-mix(in srgb, var(--work) 12%, transparent); display: grid; gap: 4px; }
 .dev-note strong { font-size: 12px; }
 .dev-note span { font-size: 11px; color: var(--muted); }
+
+.update-panel { gap: 12px; }
+.update-heading { display: flex !important; grid-template-columns: none; align-items: center; justify-content: space-between; gap: 12px; }
+.update-heading > div { display: grid; gap: 4px; }
+.update-badge { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: color-mix(in srgb, var(--tasks) 14%, transparent); color: var(--tasks) !important; font-weight: 700; }
+.update-message { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.update-actions { display: flex !important; flex-wrap: wrap; gap: 8px !important; }
+.update-progress { display: grid !important; grid-template-columns: 1fr auto; align-items: center; gap: 10px !important; }
+.update-progress__track { height: 7px; border-radius: 999px; overflow: hidden; background: var(--soft-line); }
+.update-progress__bar { height: 100%; border-radius: inherit; background: var(--sleep); transition: width .2s ease; }
 
 .dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.35); backdrop-filter: blur(8px); padding: 20px; }
 .dialog { width: min(430px, 100%); border-radius: 26px; border: 1px solid var(--line); background: var(--surface-solid); padding: 26px; box-shadow: 0 30px 100px rgba(0,0,0,.25); }
