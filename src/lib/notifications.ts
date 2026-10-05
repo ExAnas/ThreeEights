@@ -21,16 +21,17 @@ export async function getNotificationPermission(): Promise<NotificationPermissio
   return 'Notification' in window ? Notification.permission : 'unsupported'
 }
 
-export async function showPhaseReadyNotification(title: string): Promise<void> {
+export async function showPhaseReadyNotification(title: string, nextTitle: string): Promise<void> {
   // The Windows desktop build schedules this natively in Rust so it still fires
   // while the window is hidden in the system tray. Avoid a duplicate toast here.
   if (isTauriDesktop()) return
   if (!('Notification' in window) || Notification.permission !== 'granted') return
 
+  const body = `انتهت فترة ${title} وبدأت فترة ${nextTitle} تلقائياً.`
   const registration = await navigator.serviceWorker?.ready.catch(() => null)
   if (registration) {
     const options: NotificationOptions & { renotify?: boolean } = {
-      body: `${title} انتهت. يمكنك الآن تأشيرها والانتقال للفترة التالية.`,
+      body,
       icon: '/icon.svg',
       badge: '/icon.svg',
       tag: 'phase-ready',
@@ -40,9 +41,7 @@ export async function showPhaseReadyNotification(title: string): Promise<void> {
     return
   }
 
-  new Notification('8 × 3', {
-    body: `${title} انتهت. يمكنك الآن تأشيرها والانتقال للفترة التالية.`,
-  })
+  new Notification('8 × 3', { body })
 }
 
 export function playReadyTone(): void {
