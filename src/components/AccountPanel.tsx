@@ -126,6 +126,10 @@ export function AccountPanel({ state, onRemoteState }: Props) {
     )
   }
 
+  if (!client) {
+    return null
+  }
+
   if (!user) {
     return (
       <div className="sync-box">
