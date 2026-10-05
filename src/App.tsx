@@ -4,14 +4,12 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { PhaseCard } from './components/PhaseCard'
 import { SettingsPanel } from './components/SettingsPanel'
 import { AccountPanel } from './components/AccountPanel'
-import { PHASE_META, PHASES } from './features/cycle/constants'
+import { PHASE_META, PHASES, nextPhase } from './features/cycle/constants'
 import {
-  completePhase,
-  markTimerNotified,
+  advanceCycle,
   replaceFromSync,
   resetCurrentCycle,
-  startNewCycle,
-  undoLastCompletion,
+  startPhase,
 } from './features/cycle/cycleSlice'
 import { getPhaseStatus, getRemainingMs, selectCycle } from './features/cycle/selectors'
 import type { Phase } from './features/cycle/types'
@@ -20,7 +18,7 @@ import { cancelNativePhaseNotification, isTauriDesktop, scheduleNativePhaseNotif
 import { SOUND_KEY, THEME_KEY } from './lib/persistence'
 import type { AppDispatch } from './store'
 
-type ConfirmAction = 'undo' | 'reset' | 'new-cycle' | null
+type ConfirmAction = 'reset' | null
 
 function getInitialTheme(): 'light' | 'dark' {
   const saved = localStorage.getItem(THEME_KEY)
@@ -71,7 +69,14 @@ export default function App() {
       void cancelNativePhaseNotification().catch(() => undefined)
       return
     }
-    void scheduleNativePhaseNotification(timer.phase, PHASE_META[timer.phase].title, timer.endsAt).catch(() => undefined)
+
+    const upcoming = nextPhase(timer.phase)
+    void scheduleNativePhaseNotification(
+      timer.phase,
+      PHASE_META[timer.phase].title,
+      PHASE_META[upcoming].title,
+      timer.endsAt,
+    ).catch(() => undefined)
   }, [cycle.timer])
 
   useEffect(() => {
@@ -79,48 +84,36 @@ export default function App() {
     if (!timer || now < timer.endsAt) return
 
     const key = `${cycle.cycleNumber}:${timer.phase}:${timer.endsAt}`
-    if (cycle.lastNotifiedKey === key || lastTimerRef.current === key) return
-    lastTimerRef.current = key
+    if (lastTimerRef.current !== key) {
+      lastTimerRef.current = key
+      const upcoming = nextPhase(timer.phase)
+      if (soundEnabled) playReadyTone()
+      void showPhaseReadyNotification(PHASE_META[timer.phase].title, PHASE_META[upcoming].title)
+    }
 
-    const title = PHASE_META[timer.phase].title
-    if (soundEnabled) playReadyTone()
-    void showPhaseReadyNotification(title)
-    dispatch(markTimerNotified({ key, now }))
-  }, [cycle, dispatch, now, soundEnabled])
+    dispatch(advanceCycle({ now }))
+  }, [cycle.cycleNumber, cycle.timer, dispatch, now, soundEnabled])
 
   const completedCount = useMemo(() => PHASES.filter((phase) => cycle.completed[phase]).length, [cycle.completed])
   const progress = (completedCount / PHASES.length) * 100
-  const canUndo = completedCount > 0
-  const cycleDone = cycle.currentPhase === null
+  const isIdle = cycle.timer === null
+  const activeTitle = cycle.timer ? PHASE_META[cycle.timer.phase].title : null
 
-  const complete = (phase: Phase) => dispatch(completePhase({ phase, now: Date.now() }))
+  const start = (phase: Phase) => dispatch(startPhase({ phase, now: Date.now() }))
 
   const performConfirmedAction = () => {
-    const timestamp = Date.now()
-    if (confirmAction === 'undo') dispatch(undoLastCompletion({ now: timestamp }))
-    if (confirmAction === 'reset') dispatch(resetCurrentCycle({ now: timestamp }))
-    if (confirmAction === 'new-cycle') dispatch(startNewCycle({ now: timestamp }))
+    if (confirmAction === 'reset') {
+      dispatch(resetCurrentCycle({ now: Date.now() }))
+    }
     setConfirmAction(null)
   }
 
   const dialogCopy = {
-    undo: {
-      title: 'التراجع عن آخر تأشير؟',
-      description: 'سيُلغى المؤقت الذي بدأ بعد آخر تأشير، وتعود آخر فترة مكتملة إلى حالة جاهزة. لن تتأثر الفترات الأقدم.',
-      label: 'تراجع',
-      destructive: false,
-    },
     reset: {
-      title: 'إعادة ضبط هذه الدورة؟',
-      description: 'ستُمسح علامات الإكمال والمؤقت الحالي وتعود الدورة إلى النوم. هذا الإجراء لا يمكن استرجاعه.',
-      label: 'إعادة الضبط',
+      title: 'إيقاف الدورة وإعادة الاختيار؟',
+      description: 'سيتوقف المؤقت الحالي وتُمسح علامات هذه الدورة، وبعدها يمكنك البدء من النوم أو العمل أو المهام.',
+      label: 'إعادة الاختيار',
       destructive: true,
-    },
-    'new-cycle': {
-      title: 'بدء دورة جديدة؟',
-      description: 'ستبدأ دورة جديدة من النوم، مع الاحتفاظ برقم الدورة السابقة كمرجع فقط.',
-      label: 'ابدأ الدورة',
-      destructive: false,
     },
   } as const
 
@@ -148,15 +141,18 @@ export default function App() {
         <section className="hero" aria-labelledby="page-title">
           <div className="hero-copy">
             <span className="eyebrow">الدورة {cycle.cycleNumber}</span>
-            <h1 id="page-title">كل شيء يأخذ<br /><em>ثماني ساعات.</em></h1>
-            <p>لا انتقال مبكر، ولا مؤقت هش. أكمل الفترة، اترك التالية تأخذ وقتها، ثم انتقل عندما تصبح جاهزة.</p>
+            <h1 id="page-title">ابدأ من أي مكان.<br /><em>ثماني ساعات.</em></h1>
+            <p>اختر النوم أو العمل أو المهام كنقطة بداية. بعد كل 8 ساعات تنتقل الدورة تلقائياً للفترة التالية، وبعد المهام تبدأ دورة جديدة من النوم.</p>
           </div>
 
           <div className="progress-card" aria-label={`تقدم الدورة ${completedCount} من 3`}>
             <div className="progress-ring" style={{ '--progress': `${progress * 3.6}deg` } as CSSProperties}>
               <div className="progress-ring__inner"><strong>{completedCount}<span>/3</span></strong><small>مكتملة</small></div>
             </div>
-            <div className="progress-copy"><strong>{cycleDone ? 'الدورة مكتملة' : 'تقدّم ثابت، بدون قفز'}</strong><span>{cycleDone ? 'يمكنك بدء دورة جديدة الآن.' : 'كل بطاقة تُفتح فقط عندما يحين دورها.'}</span></div>
+            <div className="progress-copy">
+              <strong>{isIdle ? 'اختر نقطة البداية' : 'الدورة تعمل تلقائياً'}</strong>
+              <span>{isIdle ? 'ابدأ من أي بطاقة تناسب وقتك الآن.' : `الفترة الحالية: ${activeTitle}. التالية تبدأ تلقائياً عند انتهاء المؤقت.`}</span>
+            </div>
           </div>
         </section>
 
@@ -165,19 +161,32 @@ export default function App() {
             const status = getPhaseStatus(cycle, phase, now)
             const remaining = getRemainingMs(cycle, phase, now)
             const endsAt = cycle.timer?.phase === phase ? cycle.timer.endsAt : null
-            return <PhaseCard key={phase} phase={phase} status={status} remainingMs={remaining} endsAt={endsAt} onComplete={() => complete(phase)} />
+            return (
+              <PhaseCard
+                key={phase}
+                phase={phase}
+                status={status}
+                remainingMs={remaining}
+                endsAt={endsAt}
+                onStart={() => start(phase)}
+              />
+            )
           })}
         </section>
 
         <section className="control-bar" aria-label="إجراءات الدورة">
           <div className="control-copy">
             <span className="eyebrow">التحكم</span>
-            <strong>{cycleDone ? 'أنهيت المراحل الثلاث.' : canUndo ? 'يمكنك التراجع فقط عن آخر خطوة.' : 'ابدأ بتأشير النوم عند اكتماله.'}</strong>
+            <strong>
+              {isIdle
+                ? 'اختر أي فترة لبدء دورة الـ 8 ساعات.'
+                : `${activeTitle} تعمل الآن؛ الانتقال للفترة التالية تلقائي.`}
+            </strong>
           </div>
           <div className="control-actions">
-            {cycleDone && <button className="button button--primary" type="button" onClick={() => setConfirmAction('new-cycle')}>دورة جديدة</button>}
-            <button className="button button--secondary" type="button" disabled={!canUndo} onClick={() => setConfirmAction('undo')}>تراجع عن آخر تأشير</button>
-            <button className="button button--ghost" type="button" onClick={() => setConfirmAction('reset')}>إعادة الضبط</button>
+            <button className="button button--ghost" type="button" onClick={() => setConfirmAction('reset')}>
+              إيقاف وإعادة الاختيار
+            </button>
           </div>
         </section>
 
