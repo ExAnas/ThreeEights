@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import reducer, {
-  completePhase,
+  advanceCycle,
   initialCycleState,
-  startNewCycle,
-  undoLastCompletion,
+  resetCurrentCycle,
+  startPhase,
 } from '../src/features/cycle/cycleSlice'
 import { PHASE_DURATION_MS } from '../src/features/cycle/constants'
 
@@ -11,64 +11,95 @@ function fresh() {
   return {
     ...initialCycleState,
     completed: { ...initialCycleState.completed },
+    currentPhase: null,
+    timer: null,
     updatedAt: 0,
   }
 }
 
 describe('cycle reducer', () => {
-  it('starts with sleep ready and no timer', () => {
+  it('starts idle so any phase can be selected', () => {
     const state = fresh()
-    expect(state.currentPhase).toBe('sleep')
+    expect(state.currentPhase).toBeNull()
     expect(state.timer).toBeNull()
+    expect(state.completed).toEqual({ sleep: false, work: false, tasks: false })
   })
 
-  it('completing sleep starts the work timer', () => {
+  it('can start directly from work and counts sleep as completed', () => {
     const now = 1_000
-    const state = reducer(fresh(), completePhase({ phase: 'sleep', now }))
-    expect(state.completed.sleep).toBe(true)
+    const state = reducer(fresh(), startPhase({ phase: 'work', now }))
+
+    expect(state.completed).toEqual({ sleep: true, work: false, tasks: false })
     expect(state.currentPhase).toBe('work')
     expect(state.timer).toEqual({ phase: 'work', startedAt: now, endsAt: now + PHASE_DURATION_MS })
   })
 
-  it('does not allow completing a running phase early', () => {
-    const t0 = 1_000
-    const afterSleep = reducer(fresh(), completePhase({ phase: 'sleep', now: t0 }))
-    const early = reducer(afterSleep, completePhase({ phase: 'work', now: t0 + 1000 }))
-    expect(early.completed.work).toBe(false)
-    expect(early.currentPhase).toBe('work')
+  it('can start directly from tasks and counts earlier phases as completed', () => {
+    const now = 2_000
+    const state = reducer(fresh(), startPhase({ phase: 'tasks', now }))
+
+    expect(state.completed).toEqual({ sleep: true, work: true, tasks: false })
+    expect(state.currentPhase).toBe('tasks')
+    expect(state.timer?.phase).toBe('tasks')
   })
 
-  it('allows completing a phase at its deadline', () => {
+  it('does not let another phase replace a running timer', () => {
     const t0 = 1_000
-    const afterSleep = reducer(fresh(), completePhase({ phase: 'sleep', now: t0 }))
-    const workDone = reducer(afterSleep, completePhase({ phase: 'work', now: t0 + PHASE_DURATION_MS }))
-    expect(workDone.completed.work).toBe(true)
-    expect(workDone.currentPhase).toBe('tasks')
-    expect(workDone.timer?.phase).toBe('tasks')
+    const running = reducer(fresh(), startPhase({ phase: 'sleep', now: t0 }))
+    const unchanged = reducer(running, startPhase({ phase: 'tasks', now: t0 + 1_000 }))
+
+    expect(unchanged.currentPhase).toBe('sleep')
+    expect(unchanged.timer?.phase).toBe('sleep')
   })
 
-  it('undoes only the most recent completion and cancels the downstream timer', () => {
+  it('moves automatically to the next phase at the deadline', () => {
     const t0 = 1_000
-    let state = reducer(fresh(), completePhase({ phase: 'sleep', now: t0 }))
-    state = reducer(state, completePhase({ phase: 'work', now: t0 + PHASE_DURATION_MS }))
-    state = reducer(state, undoLastCompletion({ now: t0 + PHASE_DURATION_MS + 500 }))
+    let state = reducer(fresh(), startPhase({ phase: 'sleep', now: t0 }))
+    state = reducer(state, advanceCycle({ now: t0 + PHASE_DURATION_MS }))
+
     expect(state.completed.sleep).toBe(true)
-    expect(state.completed.work).toBe(false)
     expect(state.currentPhase).toBe('work')
-    expect(state.timer).toBeNull()
+    expect(state.timer).toEqual({
+      phase: 'work',
+      startedAt: t0 + PHASE_DURATION_MS,
+      endsAt: t0 + PHASE_DURATION_MS * 2,
+    })
   })
 
-  it('finishes the cycle after tasks and can start a new cycle', () => {
+  it('wraps after tasks into a new cycle and starts sleep automatically', () => {
     const t0 = 1_000
-    let state = reducer(fresh(), completePhase({ phase: 'sleep', now: t0 }))
-    state = reducer(state, completePhase({ phase: 'work', now: t0 + PHASE_DURATION_MS }))
-    state = reducer(state, completePhase({ phase: 'tasks', now: t0 + PHASE_DURATION_MS * 2 }))
-    expect(state.currentPhase).toBeNull()
-    expect(state.completed.tasks).toBe(true)
+    let state = reducer(fresh(), startPhase({ phase: 'tasks', now: t0 }))
+    state = reducer(state, advanceCycle({ now: t0 + PHASE_DURATION_MS }))
 
-    state = reducer(state, startNewCycle({ now: t0 + PHASE_DURATION_MS * 2 + 1 }))
     expect(state.cycleNumber).toBe(2)
+    expect(state.completed).toEqual({ sleep: false, work: false, tasks: false })
     expect(state.currentPhase).toBe('sleep')
+    expect(state.timer).toEqual({
+      phase: 'sleep',
+      startedAt: t0 + PHASE_DURATION_MS,
+      endsAt: t0 + PHASE_DURATION_MS * 2,
+    })
+  })
+
+  it('catches up across multiple elapsed phases without losing the schedule', () => {
+    const t0 = 1_000
+    let state = reducer(fresh(), startPhase({ phase: 'sleep', now: t0 }))
+    state = reducer(state, advanceCycle({ now: t0 + PHASE_DURATION_MS * 3 }))
+
+    expect(state.cycleNumber).toBe(2)
+    expect(state.completed).toEqual({ sleep: false, work: false, tasks: false })
+    expect(state.currentPhase).toBe('sleep')
+    expect(state.timer?.startedAt).toBe(t0 + PHASE_DURATION_MS * 3)
+    expect(state.timer?.endsAt).toBe(t0 + PHASE_DURATION_MS * 4)
+  })
+
+  it('reset stops the timer and lets the user choose again', () => {
+    const t0 = 1_000
+    let state = reducer(fresh(), startPhase({ phase: 'work', now: t0 }))
+    state = reducer(state, resetCurrentCycle({ now: t0 + 5_000 }))
+
+    expect(state.currentPhase).toBeNull()
+    expect(state.timer).toBeNull()
     expect(state.completed).toEqual({ sleep: false, work: false, tasks: false })
   })
 })
