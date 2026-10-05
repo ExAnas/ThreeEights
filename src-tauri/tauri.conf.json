@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "8x3",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "identifier": "com.threeeights.daybalance",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,7 +31,7 @@
     "targets": ["nsis"],
     "category": "Productivity",
     "shortDescription": "قسّم يومك إلى ثلاث فترات من 8 ساعات",
-    "longDescription": "تطبيق 8x3 لإدارة النوم والعمل والمهام مع مؤقتات مقيدة ومزامنة حساب وإشعارات Windows.",
+    "longDescription": "تطبيق 8x3 لإدارة النوم والعمل والمهام مع مؤقتات متتابعة تلقائياً ومزامنة حساب وإشعارات Windows.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
