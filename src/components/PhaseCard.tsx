@@ -8,17 +8,17 @@ interface Props {
   status: PhaseStatus
   remainingMs: number | null
   endsAt: number | null
-  onComplete: () => void
+  onStart: () => void
 }
 
 const statusLabels: Record<PhaseStatus, string> = {
   done: 'مكتملة',
   running: 'جارية الآن',
-  ready: 'جاهزة للتأشير',
-  locked: 'مقفلة',
+  ready: 'جاهزة للبدء',
+  locked: 'بانتظار الدور',
 }
 
-export function PhaseCard({ phase, status, remainingMs, endsAt, onComplete }: Props) {
+export function PhaseCard({ phase, status, remainingMs, endsAt, onStart }: Props) {
   const meta = PHASE_META[phase]
   const isEnabled = status === 'ready'
   const isDone = status === 'done'
@@ -42,23 +42,29 @@ export function PhaseCard({ phase, status, remainingMs, endsAt, onComplete }: Pr
 
       <div className="timer-shell" aria-live={status === 'running' ? 'off' : 'polite'}>
         <span className="timer-label">
-          {status === 'running' ? 'الوقت المتبقي' : status === 'ready' ? 'انتهى الوقت' : status === 'done' ? 'تم الإنجاز' : 'بانتظار الدور'}
+          {status === 'running'
+            ? 'الوقت المتبقي'
+            : status === 'ready'
+              ? 'جاهزة للبدء'
+              : status === 'done'
+                ? 'مكتملة في هذه الدورة'
+                : 'بانتظار الدور'}
         </span>
         <span className="timer-value" role="timer" aria-label={`مؤقت ${meta.title}`}>
           {status === 'running' && remainingMs !== null
             ? formatDuration(remainingMs)
-            : status === 'ready' || status === 'done'
-              ? '00:00:00'
-              : formatDuration(PHASE_DURATION_MS)}
+            : status === 'ready' || status === 'locked'
+              ? formatDuration(PHASE_DURATION_MS)
+              : '00:00:00'}
         </span>
         <span className="timer-footnote">
           {status === 'running' && endsAt
-            ? `ينتهي تقريباً ${formatClock(endsAt)}`
+            ? `تنتهي تقريباً ${formatClock(endsAt)} ثم تبدأ التالية تلقائياً`
             : status === 'ready'
-              ? 'يمكنك الآن الانتقال للفترة التالية'
+              ? 'يمكنك بدء الدورة من هذه الفترة'
               : isDone
-                ? 'تم حفظها في هذه الدورة'
-                : 'سيُفتح تلقائياً عند دوره'}
+                ? 'تم احتسابها في هذه الدورة'
+                : 'ستبدأ تلقائياً بعد انتهاء الفترة الحالية'}
         </span>
       </div>
 
@@ -66,11 +72,19 @@ export function PhaseCard({ phase, status, remainingMs, endsAt, onComplete }: Pr
         className="complete-button"
         type="button"
         disabled={!isEnabled}
-        onClick={onComplete}
-        aria-label={isDone ? `تم إكمال ${meta.title}` : `تأشير ${meta.title} كمكتملة`}
+        onClick={onStart}
+        aria-label={isDone ? `تم إكمال ${meta.title}` : `بدء فترة ${meta.title}`}
       >
-        <span className="checkmark" aria-hidden="true">✓</span>
-        <span>{isDone ? 'تم' : isEnabled ? 'تأشير كمكتملة' : status === 'running' ? 'مقفلة حتى انتهاء الوقت' : 'غير متاحة الآن'}</span>
+        <span className="checkmark" aria-hidden="true">{isEnabled ? '▶' : isDone ? '✓' : '•'}</span>
+        <span>
+          {isDone
+            ? 'مكتملة'
+            : isEnabled
+              ? 'ابدأ 8 ساعات'
+              : status === 'running'
+                ? 'جارية الآن'
+                : 'تبدأ بعد الفترة الحالية'}
+        </span>
       </button>
     </article>
   )
