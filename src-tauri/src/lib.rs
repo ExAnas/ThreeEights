@@ -12,6 +12,7 @@ use tauri_plugin_notification::NotificationExt;
 struct ScheduledNotification {
     phase: String,
     phase_title: String,
+    next_phase_title: String,
     ends_at: u64,
 }
 
@@ -59,7 +60,10 @@ fn start_scheduler(app: AppHandle) {
                         .notification()
                         .builder()
                         .title("8 × 3")
-                        .body(format!("انتهت فترة {}. يمكنك الآن تأشيرها والانتقال للفترة التالية.", item.phase_title))
+                        .body(format!(
+                            "انتهت فترة {} وبدأت فترة {} تلقائياً.",
+                            item.phase_title, item.next_phase_title
+                        ))
                         .show();
                     let _ = fs::remove_file(&path);
                 }
