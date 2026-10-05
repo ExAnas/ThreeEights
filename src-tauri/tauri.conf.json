@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "8x3",
+  "version": "1.1.0",
+  "identifier": "com.threeeights.daybalance",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "8x3 — يوم متوازن",
+        "width": 1220,
+        "height": 840,
+        "minWidth": 760,
+        "minHeight": 620,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Productivity",
+    "shortDescription": "قسّم يومك إلى ثلاث فترات من 8 ساعات",
+    "longDescription": "تطبيق 8x3 لإدارة النوم والعمل والمهام مع مؤقتات مقيدة ومزامنة حساب وإشعارات Windows.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}
