@@ -6,13 +6,12 @@ export const selectCycle = (state: RootState) => state.cycle
 export const getPhaseStatus = (
   state: RootState['cycle'],
   phase: Phase,
-  now: number,
+  _now: number,
 ): PhaseStatus => {
   if (state.completed[phase]) return 'done'
-  if (state.currentPhase !== phase) return 'locked'
   if (!state.timer) return 'ready'
-  if (state.timer.phase !== phase) return 'locked'
-  return now >= state.timer.endsAt ? 'ready' : 'running'
+  if (state.timer.phase === phase) return 'running'
+  return 'locked'
 }
 
 export const getRemainingMs = (
