@@ -4,11 +4,16 @@ export function isTauriDesktop(): boolean {
   return '__TAURI_INTERNALS__' in window
 }
 
-export async function scheduleNativePhaseNotification(phase: Phase, phaseTitle: string, endsAt: number): Promise<void> {
+export async function scheduleNativePhaseNotification(
+  phase: Phase,
+  phaseTitle: string,
+  nextPhaseTitle: string,
+  endsAt: number,
+): Promise<void> {
   if (!isTauriDesktop()) return
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('schedule_phase_notification', {
-    request: { phase, phaseTitle, endsAt },
+    request: { phase, phaseTitle, nextPhaseTitle, endsAt },
   })
 }
 
