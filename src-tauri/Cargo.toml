@@ -1,6 +1,6 @@
 [package]
 name = "three-eights"
-version = "1.2.0"
+version = "1.2.1"
 description = "8x3 day balance timer"
 authors = ["8x3"]
 edition = "2021"
