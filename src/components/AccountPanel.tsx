@@ -2,13 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { CycleState } from '../features/cycle/types'
 import {
-  clearSupabaseConfig,
   getSupabaseConfig,
   loadRemoteState,
   makeSupabase,
   saveRemoteState,
-  saveSupabaseConfig,
-  type SupabaseConfig,
 } from '../lib/supabase'
 
 interface Props {
@@ -17,10 +14,8 @@ interface Props {
 }
 
 export function AccountPanel({ state, onRemoteState }: Props) {
-  const [config, setConfig] = useState<SupabaseConfig | null>(() => getSupabaseConfig())
-  const [draftUrl, setDraftUrl] = useState(config?.url ?? '')
-  const [draftKey, setDraftKey] = useState(config?.key ?? '')
-  const client = useMemo(() => (config ? makeSupabase(config) : null), [config])
+  const config = useMemo(() => getSupabaseConfig(), [])
+  const client = useMemo(() => makeSupabase(config), [config])
   const [user, setUser] = useState<User | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,9 +23,13 @@ export function AccountPanel({ state, onRemoteState }: Props) {
   const [message, setMessage] = useState('')
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const hydratedUserRef = useRef<string | null>(null)
+  const stateRef = useRef(state)
 
   useEffect(() => {
-    if (!client) return
+    stateRef.current = state
+  }, [state])
+
+  useEffect(() => {
     let mounted = true
 
     void client.auth.getSession().then(({ data }) => {
@@ -48,23 +47,26 @@ export function AccountPanel({ state, onRemoteState }: Props) {
     }
   }, [client])
 
-  // First sync after login: newest timestamp wins.
+  // First sync after login: the newest state wins.
   useEffect(() => {
-    if (!client || !user || hydratedUserRef.current === user.id) return
+    if (!user || hydratedUserRef.current === user.id) return
     hydratedUserRef.current = user.id
 
     void (async () => {
       setBusy(true)
       setMessage('جاري مزامنة بياناتك…')
       try {
+        const local = stateRef.current
         const remote = await loadRemoteState(client, user.id)
-        if (remote && remote.updatedAt > state.updatedAt) {
+
+        if (remote && remote.updatedAt > local.updatedAt) {
           onRemoteState(remote)
-          setMessage('تم استرجاع أحدث بياناتك من الحساب.')
+          setMessage('تم استرجاع أحدث بياناتك من السحابة.')
         } else {
-          await saveRemoteState(client, user.id, state)
+          await saveRemoteState(client, user.id, local)
           setMessage(remote ? 'تمت مزامنة بياناتك.' : 'تم إنشاء النسخة السحابية الأولى.')
         }
+
         setLastSyncedAt(Date.now())
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'تعذرت المزامنة.')
@@ -72,18 +74,50 @@ export function AccountPanel({ state, onRemoteState }: Props) {
         setBusy(false)
       }
     })()
-    // state intentionally excluded: this is only the login hydration pass.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, user, onRemoteState])
 
-  // Offline-first autosave. Local state is already stored immediately by Redux.
+  // Receive changes from the same account on other devices in real time.
   useEffect(() => {
-    if (!client || !user || hydratedUserRef.current !== user.id) return
+    if (!user || hydratedUserRef.current !== user.id) return
+
+    const channel = client
+      .channel(`user-app-state:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_app_state',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const record = payload.new as { state?: CycleState }
+          const remote = record.state
+          if (!remote || remote.version !== 1) return
+          if (remote.updatedAt <= stateRef.current.updatedAt) return
+
+          onRemoteState(remote)
+          setLastSyncedAt(Date.now())
+          setMessage('تم تحديث بياناتك من جهاز آخر.')
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void client.removeChannel(channel)
+    }
+  }, [client, user, onRemoteState])
+
+  // Offline-first autosave. Local Redux/localStorage stays immediate.
+  useEffect(() => {
+    if (!user || hydratedUserRef.current !== user.id) return
+
     const timer = window.setTimeout(() => {
       void saveRemoteState(client, user.id, state)
         .then(() => setLastSyncedAt(Date.now()))
         .catch(() => undefined)
-    }, 900)
+    }, 700)
+
     return () => window.clearTimeout(timer)
   }, [client, state, user])
 
@@ -99,44 +133,27 @@ export function AccountPanel({ state, onRemoteState }: Props) {
     }
   }
 
-  if (!config) {
-    return (
-      <div className="sync-box account-setup">
-        <strong>إعداد التخزين السحابي مرة واحدة</strong>
-        <p className="sync-message">أنشئ مشروع Supabase مجاني، ثم الصق Project URL وPublishable/anon key هنا. بعدها تظهر شاشة تسجيل الدخول.</p>
-        <div className="sync-fields sync-fields--stacked">
-          <input dir="ltr" aria-label="Supabase Project URL" placeholder="https://xxxx.supabase.co" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} />
-          <input dir="ltr" aria-label="Supabase publishable key" placeholder="sb_publishable_... أو anon key" value={draftKey} onChange={(e) => setDraftKey(e.target.value)} />
-        </div>
-        <div className="sync-actions">
-          <button
-            className="button button--primary"
-            disabled={!draftUrl.startsWith('http') || draftKey.length < 20}
-            onClick={() => {
-              const next = { url: draftUrl.trim(), key: draftKey.trim() }
-              saveSupabaseConfig(next)
-              setConfig(next)
-              setMessage('تم حفظ إعداد المشروع.')
-            }}
-          >
-            حفظ وإكمال
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!client) {
-    return null
-  }
-
   if (!user) {
     return (
       <div className="sync-box">
-        <div className="account-badge">☁ حسابك يحفظ تقدمك على أجهزتك</div>
+        <div className="account-badge">☁ حساب واحد — نفس العداد على كل أجهزتك</div>
         <div className="sync-fields">
-          <input aria-label="البريد الإلكتروني" type="email" autoComplete="email" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input aria-label="كلمة المرور" type="password" autoComplete="current-password" placeholder="كلمة المرور — 8 أحرف على الأقل" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input
+            aria-label="البريد الإلكتروني"
+            type="email"
+            autoComplete="email"
+            placeholder="البريد الإلكتروني"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            aria-label="كلمة المرور"
+            type="password"
+            autoComplete="current-password"
+            placeholder="كلمة المرور — 8 أحرف على الأقل"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </div>
         <div className="sync-actions">
           <button
@@ -156,22 +173,14 @@ export function AccountPanel({ state, onRemoteState }: Props) {
             onClick={() => void run(async () => {
               const { data, error } = await client.auth.signUp({ email, password })
               if (error) throw error
-              setMessage(data.session ? 'تم إنشاء الحساب وتسجيل الدخول.' : 'تم إنشاء الحساب. إذا كان تأكيد البريد مفعلاً، افتح رسالة التفعيل ثم سجّل الدخول.')
+              setMessage(
+                data.session
+                  ? 'تم إنشاء الحساب وتسجيل الدخول.'
+                  : 'تم إنشاء الحساب. افتح رسالة التفعيل في بريدك ثم سجّل الدخول.',
+              )
             })}
           >
             إنشاء حساب
-          </button>
-          <button
-            className="button button--ghost"
-            disabled={busy}
-            onClick={() => {
-              clearSupabaseConfig()
-              setConfig(null)
-              setDraftUrl('')
-              setDraftKey('')
-            }}
-          >
-            تغيير إعداد المشروع
           </button>
         </div>
         {message && <p className="sync-message" role="status">{message}</p>}
@@ -183,9 +192,13 @@ export function AccountPanel({ state, onRemoteState }: Props) {
     <div className="sync-box account-connected">
       <div className="account-row">
         <div>
-          <span className="eyebrow">متصل</span>
+          <span className="eyebrow">متصل ومزامن</span>
           <strong>{user.email}</strong>
-          <small>{lastSyncedAt ? `آخر مزامنة ${new Date(lastSyncedAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}` : 'المزامنة تلقائية'}</small>
+          <small>
+            {lastSyncedAt
+              ? `آخر مزامنة ${new Date(lastSyncedAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}`
+              : 'المزامنة تلقائية بين أجهزتك'}
+          </small>
         </div>
         <span className="account-status-dot" aria-label="متصل" />
       </div>
@@ -194,19 +207,30 @@ export function AccountPanel({ state, onRemoteState }: Props) {
           className="button button--secondary"
           disabled={busy}
           onClick={() => void run(async () => {
+            const local = stateRef.current
             const remote = await loadRemoteState(client, user.id)
-            if (!remote) {
-              setMessage('لا توجد نسخة سحابية بعد.')
-              return
+
+            if (remote && remote.updatedAt > local.updatedAt) {
+              onRemoteState(remote)
+              setMessage('تم تحميل أحدث نسخة من السحابة.')
+            } else {
+              await saveRemoteState(client, user.id, local)
+              setMessage('أنت على أحدث نسخة.')
             }
-            onRemoteState(remote)
+
             setLastSyncedAt(Date.now())
-            setMessage('تم تحميل النسخة السحابية.')
           })}
         >
-          استرجاع من السحابة
+          مزامنة الآن
         </button>
-        <button className="button button--ghost" disabled={busy} onClick={() => void run(async () => { await client.auth.signOut(); setMessage('تم تسجيل الخروج.') })}>
+        <button
+          className="button button--ghost"
+          disabled={busy}
+          onClick={() => void run(async () => {
+            await client.auth.signOut()
+            setMessage('تم تسجيل الخروج.')
+          })}
+        >
           تسجيل الخروج
         </button>
       </div>
