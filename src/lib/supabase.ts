@@ -1,32 +1,22 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { CycleState } from '../features/cycle/types'
 
-const URL_KEY = 'three-eights:supabase:url'
-const KEY_KEY = 'three-eights:supabase:publishable-key'
+const DEFAULT_SUPABASE_URL = 'https://gjqjppebojyglxtiduzt.supabase.co'
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_5BwnM--fU2jFL_BLd6ozaw_-1l1oD3I'
 
 export interface SupabaseConfig {
   url: string
   key: string
 }
 
-export function getSupabaseConfig(): SupabaseConfig | null {
+export function getSupabaseConfig(): SupabaseConfig {
   const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim()
   const envKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim()
-  if (envUrl && envKey) return { url: envUrl, key: envKey }
 
-  const url = localStorage.getItem(URL_KEY)?.trim() ?? ''
-  const key = localStorage.getItem(KEY_KEY)?.trim() ?? ''
-  return url && key ? { url, key } : null
-}
-
-export function saveSupabaseConfig(config: SupabaseConfig): void {
-  localStorage.setItem(URL_KEY, config.url.trim())
-  localStorage.setItem(KEY_KEY, config.key.trim())
-}
-
-export function clearSupabaseConfig(): void {
-  localStorage.removeItem(URL_KEY)
-  localStorage.removeItem(KEY_KEY)
+  return {
+    url: envUrl || DEFAULT_SUPABASE_URL,
+    key: envKey || DEFAULT_SUPABASE_PUBLISHABLE_KEY,
+  }
 }
 
 export function makeSupabase(config: SupabaseConfig): SupabaseClient {
@@ -51,9 +41,7 @@ export async function loadRemoteState(client: SupabaseClient, userId: string): P
   return candidate?.version === 1 ? candidate : null
 }
 
-export async function saveRemoteState(client: SupabaseClient, userId: string, state: CycleState): Promise<void> {
-  const { error } = await client
-    .from('user_app_state')
-    .upsert({ user_id: userId, state, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+export async function saveRemoteState(client: SupabaseClient, _userId: string, state: CycleState): Promise<void> {
+  const { error } = await client.rpc('save_user_app_state', { next_state: state })
   if (error) throw error
 }
