@@ -22,3 +22,20 @@ export async function cancelNativePhaseNotification(): Promise<void> {
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('cancel_phase_notification')
 }
+
+export async function updateNativeTrayCountdown(phaseTitle: string, remainingMs: number): Promise<void> {
+  if (!isTauriDesktop()) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('update_tray_countdown', {
+    request: {
+      phaseTitle,
+      remainingMs: Math.max(0, Math.floor(remainingMs)),
+    },
+  })
+}
+
+export async function resetNativeTrayCountdown(): Promise<void> {
+  if (!isTauriDesktop()) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('reset_tray_countdown')
+}
