@@ -14,7 +14,7 @@ import {
 import { getPhaseStatus, getRemainingMs, selectCycle } from './features/cycle/selectors'
 import type { Phase } from './features/cycle/types'
 import { getNotificationPermission, playReadyTone, requestNotifications, showPhaseReadyNotification } from './lib/notifications'
-import { cancelNativePhaseNotification, isTauriDesktop, scheduleNativePhaseNotification } from './lib/native'
+import { cancelNativePhaseNotification, isTauriDesktop, resetNativeTrayCountdown, scheduleNativePhaseNotification, updateNativeTrayCountdown } from './lib/native'
 import { SOUND_KEY, THEME_KEY } from './lib/persistence'
 import type { AppDispatch } from './store'
 
@@ -78,6 +78,19 @@ export default function App() {
       timer.endsAt,
     ).catch(() => undefined)
   }, [cycle.timer])
+
+  useEffect(() => {
+    const timer = cycle.timer
+    if (!timer) {
+      void resetNativeTrayCountdown().catch(() => undefined)
+      return
+    }
+
+    void updateNativeTrayCountdown(
+      PHASE_META[timer.phase].title,
+      Math.max(0, timer.endsAt - now),
+    ).catch(() => undefined)
+  }, [cycle.timer, now])
 
   useEffect(() => {
     const timer = cycle.timer
